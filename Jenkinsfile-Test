@@ -12,7 +12,7 @@ pipeline {
 
         NINJA_DATABASE_CONFIG = credentials('odh-tourism-ninja-database.properties')
 
-        ROOT_PATH = "ninja"
+        ROOT_PATH = "."
     }
 
     stages {
