@@ -1,0 +1,48 @@
+pipeline {
+    agent {
+        dockerfile {
+            filename 'docker/dockerfile-java'
+            additionalBuildArgs '--build-arg JENKINS_USER_ID=`id -u jenkins` --build-arg JENKINS_GROUP_ID=`id -g jenkins`'
+        }
+    }
+
+    environment {
+        TESTSERVER_TOMCAT_ENDPOINT=credentials('testserver-tomcat8-url')
+        TESTSERVER_TOMCAT_CREDENTIALS=credentials('testserver-tomcat8-credentials')
+
+        NINJA_DATABASE_CONFIG = credentials('odh-tourism-ninja-database.properties')
+
+        ROOT_PATH = "ninja"
+    }
+
+    stages {
+        stage('Configure') {
+            steps {
+                sh 'sed -i -e "s/<\\/settings>$//g\" ~/.m2/settings.xml'
+                sh 'echo "    <servers>" >> ~/.m2/settings.xml'
+                sh 'echo "        ${TESTSERVER_TOMCAT_CREDENTIALS}" >> ~/.m2/settings.xml'
+                sh 'echo "    </servers>" >> ~/.m2/settings.xml'
+                sh 'echo "</settings>" >> ~/.m2/settings.xml'
+
+                sh 'sed -i -e "s%\\(logging.level.root\\s*=\\).*\\$%\\1DEBUG,R%" ${ROOT_PATH}/src/main/resources/application.properties'
+
+                sh 'cat "${NINJA_DATABASE_CONFIG}" > ${ROOT_PATH}/src/main/resources/database.properties'
+            }
+        }
+        stage('Test - Tourism Ninja API') {
+            steps {
+                sh 'cd ${ROOT_PATH} && mvn -B -U clean test'
+            }
+        }
+        stage('Build - Tourism Ninja API') {
+            steps {
+                sh 'cd ${ROOT_PATH} && mvn -B -DskipTests package'
+            }
+        }
+        stage('Deploy - Tourism Ninja API') {
+            steps {
+                sh 'cd ${ROOT_PATH} && mvn -B -DskipTests tomcat:redeploy -Dmaven.tomcat.url=${TESTSERVER_TOMCAT_ENDPOINT} -Dmaven.tomcat.server=testServer'
+            }
+        }
+    }
+}
